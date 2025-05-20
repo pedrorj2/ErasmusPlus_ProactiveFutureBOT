@@ -1,0 +1,138 @@
+// Pregunta 1
+:: Vibration. Basic Concepts
+:: A system is said to be holonomic if {
+~all the constraint can be expressed in the form of an integral
+~it has no constraints
+=all the constraints are integrable
+}
+
+// Pregunta 2
+:: Vibration. Basic Concepts
+:: The Rayleigh function has the physical meaning of {
+=half the loss of total energy of the system with time
+~the total energy  dissipated in a cycle of oscillation
+~the difference between the kinetic and the potential energy
+}
+
+// Pregunta 3
+:: Vibration. Basic Concepts
+:: The response of a system to an initial displacement is equal to {
+~the response of a system to an initial kinetic energy
+=the response of a system to an initial potential energy
+~the response of a system to a constant force
+}
+
+// Pregunta 4
+:: Vibration. Basic Concepts
+:: The critical damping is defined as {
+~the value of the damping for which the response of the system has two complex roots
+=the value of the damping coefficient for which the response of the system has only one root
+~the value of the system for which the response of the system has two real roots
+}
+
+// Pregunta 5
+:: Vibration. Basic Concepts
+:: The response of a critically damped system goes to zero {
+~Slower than the underdamped system
+=Faster than any other damped system
+~Slower than the overdamped system
+}
+
+// Pregunta 6
+:: Vibration. Basic Concepts
+:: The admittance of a system is {
+=the ratio between the Fourier transform for the response and the excitation
+~the ratio between the Fourier transform of the excitation and the response
+~the response of a system to a unit pulse 
+~the response of a system to a constant unit force
+}
+
+// Pregunta 7
+:: Vibration. Basic Concepts
+:: The Fourier transform can be applied {
+~%50%for periodic functions
+~%50%for periodic and nonperiodic functions
+~%50%any function with a finite number of maximum and minima, a finite number of finite discontinuities, no infinity discontinuities, and the total input energy to the system be finite
+~%-100%any function
+} 
+
+// Pregunta 8
+:: Vibration. Basic Concepts
+:: The resonance in amplitude of a damped system is reached when {
+~the frequency of excitation is equal to the undamped natural frequency
+=the module of the amplitude response is maximum
+~the phase angle of the response is π/2
+}
+
+// Pregunta 9
+:: Vibration. Basic Concepts
+:: The \(a_0\) value in the Fourier series decomposition of an excitation force means  {
+=the mean value of the excitation in the period time
+~the maximum value of the excitation
+~for an even function is zero
+}
+
+// Pregunta 10
+:: Vibration. Basic Concepts
+:: The memory function represents {
+=the response of a system to a unit impulse
+~the response of a system to a unit step function
+~is equal to the admittance of the system
+}
+
+// Pregunta 11
+:: Vibration. Basic Concepts
+:: The installation function is {
+=the derivative of the installation function is equal to the memory function
+~the derivative of the memory function is equal to the installation function
+~the memory function and the installation function are not related
+}
+
+// Pregunta 12
+:: Vibration. Basic Concepts
+:: The Nyquist diagram is {
+~%50%the representation of the imaginary part versus the real part of the mobility function
+~%50%a perfect circle when the mobility function is represented
+~%50%the representation of the imaginary part versus the real part of the admittance
+}
+
+// Pregunta 13
+:: Vibration. Basic Concepts
+:: A random process is said to be ergodic if {
+=is stationary and the temporal average and the autocorrelation function are independent of the sample temporal register used 
+~is independent of time
+~the autocorrelation function is constant
+}
+
+// Pregunta 14
+:: Vibration. Basic Concepts
+:: The power spectral density of the respose of a system to a random excitation can be obtained as {
+~the product of the admittance and the power spectral density of the excitation
+~the ratio of the square of the module of the admittance and the power spectral density of the excitation
+=the product of the square of the module of the admittance and the power spectral density of the excitation
+}
+
+// Pregunta 15
+:: Vibration. Basic Concepts
+:: For a system with n degrees of freedom antiresonance can be defined as {
+=the frequency for which the response of the system in the generalized coordinate at which the load is applied is null
+~the frequency for which the response of the system is null for all the generalized coordinates
+~the frequency for which the response of the system in the generalized coordinate at which the load is applied has a negative peak
+}
+
+// Pregunta 16
+:: Vibration. Basic Concepts
+:: For a system with structural damping {
+~%50%the energy dissipated in a cycle of oscillation is independent of the frequency of excitation
+~%50%the energy dissipated in a cycle of oscillation is proportional to the square of the amplitude of oscillation
+~%-100%the energy dissipated in a cycle of oscillation is proportional to the frequency of excitation
+}
+
+// Pregunta 17
+:: Vibration. Basic Concepts
+:: For a system with structural damping {
+~%50%the energy dissipated in a cycle of oscillation is independent of the frequency of excitation
+~%50%the energy dissipated in a cycle of oscillation is proportional to the square of the amplitude of oscillation
+~%-100%the energy dissipated in a cycle of oscillation is proportional to the frequency of excitation
+}
+

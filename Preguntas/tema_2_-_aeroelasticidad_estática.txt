@@ -1,0 +1,9 @@
+// Pregunta 1 (GIA, MUIA)
+:: Static Aeroelasticity
+:: Divergence instability depends on {
+~%-100%the aircraft mass
+~%50%location of the aerodynamic centre with respect to the elastic axis
+~%-100%the location of the engines centres of gravity with respect to the elastic axis
+~%50%the torsional stiffness of the wing
+}
+

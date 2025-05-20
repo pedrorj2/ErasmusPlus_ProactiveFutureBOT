@@ -1,0 +1,103 @@
+// Pregunta 1
+:: Aerodynamics. Basic Concepts
+:: The pressure coefficient is defined as {
+~the pressure difference between the real pressure and the freestream pressure
+~the pressure difference between the real pressure and the dynamic pressure
+~the total pressure divided by the dynamic pressure
+=the ratio of the perturbation pressure and the dynamic pressure
+}
+
+// Pregunta 2
+:: Aerodynamics. Basic Concepts
+:: The mean camber line is defined as {
+~it is a straight line connecting the leading and trailing edges
+=the locus of the points midway between the upper surface and the lower surface, measured perpendicular to the chord line
+~distance between the upper and lower surface 
+}
+
+// Pregunta 3
+:: Aerodynamics. Basic Concepts
+:: For the small perturbation flow the boundary condition at the airfoil surface is evaluated at {
+~the mean camber line 
+~the airfoil upper surface
+~the airfoil lower surface
+=none of the previous answers are correct
+}
+
+// Pregunta 4
+:: Aerodynamics. Basic Concepts
+:: The Kutta condition is means {
+~%-100%the pressure coefficient at the trailing edge is zero
+~%50%the pressure jump at the trailing edge of the wing must be zero
+~%50%is imposed to force the solution to be unique
+}
+
+// Pregunta 5
+:: Aerodynamics. Basic Concepts
+:: The polar diagram represents {
+~cl as a function of the angle of attack
+=cl as a function of cd with the angle of attack as a parameter 
+~cd as a function of the angle of attack
+}
+
+// Pregunta 6
+:: Aerodynamics. Basic Concepts
+:: The pressure distribution on a flat plate at angle of attack has the following properties {
+~%-100%the lift coefficient is π 
+~%50%the pressure at the leading edge is singular of the form 1\sqrt(epsilon))
+~%50%the pressure at the trailing edge goes to zero as sqrt(epsilon))
+}
+
+// Pregunta 7
+:: Aerodynamics. Basic Concepts
+:: The aspect ratio of a wing is defined as {
+~the ratio between the span of the wing and the root chord
+~the ratio between the span of the wing and the tip chord
+~the ratio of the mean chord and the span of the wing
+=the ratio of the squared wingspan to the wing surface area
+}
+
+// Pregunta 8
+:: Aerodynamics. Basic Concepts
+:: The induced angle of attack for a three dimensional wing is defined as {
+~the ratio between the slope of the mean camber line and the freestream velocity
+~the angle of attack at the wing root
+~the mean angle of attack along the wingspan
+=minus the induced velocity by the vortex wake divided by the freestream velocity
+}
+
+// Pregunta 9
+:: Aerodynamics. Basic Concepts
+:: The induced drag for a three-dimensional wing is defined as {
+~%-100%the drag induced by friction at the wing surface
+~%-100%the total drag on the wing
+~%50%the component of the normal force in the freestream direction
+~%50%the drag induced by the wake for a finite wing
+}
+
+// Pregunta 10
+:: Aerodynamics. Prueba
+:: The induced drag for a three-dimensional wing is defined as {
+~%-100%the drag induced by friction at the wing surface
+~%-100%the total drag on the wing
+~%50%the component of the normal force in the freestream direction
+~%50%the drag induced by the wake for a finite wing
+}
+
+// Pregunta 11
+:: Aerodynamics. Prueba
+:: The induced drag for a three-dimensional wing is defined as {
+~%-100%the drag induced by friction at the wing surface
+~%-100%the total drag on the wing
+~%50%the component of the normal force in the freestream direction
+~%50%the drag induced by the wake for a finite wing
+}
+
+// Pregunta 12
+:: Aerodynamics. Prueba
+:: The induced drag for a three-dimensional wing is defined as {
+~%-100%the drag induced by friction at the wing surface
+~%-100%the total drag on the wing
+~%50%the component of the normal force in the freestream direction
+~%50%the drag induced by the wake for a finite wing
+}

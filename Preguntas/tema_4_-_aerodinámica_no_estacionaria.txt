@@ -1,0 +1,106 @@
+// Pregunta 1
+:: Unsteady Aerodynamics
+:: The quasi-steady aerodynamics concept consists of {
+=consider the steady aerodynamics with the unsteady boundary condition on the wing
+~ consider the steady aerodynamics with the unsteady expression for the pressure coefficient
+~the low frequency solution to the unsteady aerodynamic problem
+}
+
+// Pregunta 2
+:: Unsteady Aerodynamics
+:: The linearized potential flow models can only be applied at {
+~%-100%subsonic flows
+~%50%subsonic, supersonic and sonic flows
+~%-100%supersonic flows
+~%-100%untapered wings
+}
+
+// Pregunta 3
+:: Unsteady Aerodynamics
+:: The indicial aerodynamics concept consists of {
+   ~Determine the unsteady aerodynamic forces on a wing at time equal to zero
+   =Determine the unsteady aerodynamic forces on a wing due to an instantaneous change in angle of attack
+   ~Determine the unsteady aerodynamic forces on a wing oscillating harmonically
+   ~Determine the aerodynamic forces on a rigid wing 
+}
+
+// Pregunta 4
+:: Unsteady Aerodynamics
+:: The Wagner function can be defined as {
+=the nondimensional lift on a flat plate in an incompressible flow when changes instantaneously of angle of attack
+~the nondimensional lift on a flat plate in a compressible flow when changes instantaneously of angle of attack
+~the nondimensional lift on a flat plate in an incompressible flow when the angle of attack changes harmonically with time
+~the nondimensional lift on a 3D elliptical wing in an incompressible fluid
+}
+
+// Pregunta 5
+:: Unsteady Aerodynamics
+:: The Kussner function can be defined as {
+~the nondimensional lift on a flat plate in a compressible fluid when penetrates in sharp edge gust that induce an angle of attack of unity
+~the nondimensional lift on a flat plate in an incompressible fluid when penetrates in a harmonic gust that induce an angle of attack of unity
+~the nondimensional lift on a three-dimensional wing in an incompressible fluid when penetrates in sharp edge gust that induce an angle of attack of unity
+=the nondimensional lift on a flat plate in an incompressible fluid when penetrates in sharp edge gust that induce an angle of attack of unity
+}
+
+// Pregunta 6
+:: Unsteady Aerodynamics
+:: When the Kutta condition is imposed on the oscillating airfoil in an incompressible flow it allows to {
+   ~%50%determine the relation between the vortex shed to the wake and the bound vorticity
+   ~%-100%determine the intensity of the bound vorticity on the airfoil
+   ~%-100%determine the aerodynamic pressure coefficient on the airfoil
+   ~%50%reduced the unknown of the integral equation to the bound vorticity on the airfoil
+}
+
+// Pregunta 7
+:: Unsteady Aerodynamics
+:: The Sears function can be defined as {
+   =the nondimensional lift on a flat plate in an incompressible fluid immersed in a harmonic gust of reduced frequency  k 
+   ~the nondimensional lift on a flat plate in a compressible fluid immersed in a harmonic gust of reduced frequency  k
+   ~the nondimensional lift on a three dimensional wing in an incompressible fluid immersed in a harmonic gust of reduced frequency  k
+   ~none of the above is correct
+}
+
+// Pregunta 8
+:: Unsteady Aerodynamics
+:: The wing tangency condition for unsteady flows states that {
+   ~%50%the normal velocity of the fluid at the wing mean surface is equal to the freestream velocity times the wing slope plus the vertical velocity of the wing surface
+   ~%-100%the normal velocity of the fluid at the wing surface is zero
+   ~%-100%the normal velocity of the fluid at the wing surface is equal to the local slope of the wing surface
+   ~%50%at any instant fluid cannot penetrate into the wing surface
+}
+
+// Pregunta 9
+:: Unsteady Aerodynamics
+:: The phase lag between the motion of the wing and the forces acting on it is due to {
+   ~%50%compressiblity effects
+   ~%-100%there is no lag between force and motion if the fluid is incompressible
+   ~%-100%the phase lag is independent of the wing motion
+   ~%50%the induced velocity by the shedded wake
+}
+
+// Pregunta 10
+:: Unsteady Aerodynamics
+:: The acceleration potential allows to {
+   ~%50%consider only the lifting surface to place the unknown values of the singularities
+   ~%-100%compute the acceleration of the fluid and by time integration the velocities 
+   ~%-100%depends on the mode of oscillation of the wing
+   ~%50%can be expressed as a linear relation with the velocity potential and its derivatives
+}
+
+// Pregunta 11
+:: Unsteady Aerodynamics
+:: The strip theory method can be applied for {
+   ~%50%high aspect ratio wings
+   ~%-100%any type of wings
+   ~%-100%rectangular wings
+   ~%50%any reduced frequency of oscillation
+}
+
+// Pregunta 12
+:: Unsteady Aerodynamics
+:: For the computation of wing body interference {
+   ~%50%for the body has to be considered the velocity potential and for the wing the acceleration potential
+   ~%-100%for body and wing the acceleration potential can be used
+   ~%-100%the wake of the body can be neglected
+   ~%50%the pressure coefficient on the body depends on the body thickness
+}

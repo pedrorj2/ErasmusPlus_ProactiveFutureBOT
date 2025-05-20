@@ -1,0 +1,58 @@
+// Pregunta 1 (GIA,MUIA)
+:: Dynamic Aeroelasticity
+:: Aircraft flutter instability is usually associated to {
+~the instability of one normal mode of the aircraft, typically torsion
+~the instability of one normal mode of the aircraft, typically bending
+~the coupling of two normal modes
+=coupling of two or more normal modes
+}
+ 
+// Pregunta 2 (GIA,MUIA)
+:: Dynamic Aeroelasticity
+:: The flutter mechanism based on control surface rotation with wing bending is usually mitigated by {
+~moving the centre of gravity of the control surface towards its trailing edge
+=moving the centre of gravity of the control surface towards the hinge line
+~increasing the weight of the control surface maintaining the position of its centre of gravity
+}
+ 
+// Pregunta 3 (GIA,MUIA)
+:: Dynamic Aeroelasticity
+:: The flutter mechanisms with relevant influence of the control surface rotation is avoided if {
+~the centre of gravity of the control surface stays at the hinge line (100% balance condition)
+~the centre of gravity is ahead of the hinge line, close to the leading edge of the control surface
+~the centre of gravity of the control surface stays at the hinge line (100% balance condition) and at the mid position in the spanwise direction
+=none of the previous answers are correct
+}
+ 
+// Pregunta 4 (GIA,MUIA)
+:: Dynamic Aeroelasticity
+:: The inertia definition in the aeroelastic model us usually performed by {
+~%-100%declaring the density of the materials
+~%50%concentrated masses, joined to the structure thru ad-hoc connections
+~%50%both density-base and concentrated masses could be used depending on the assumptions in the model
+}
+ 
+// Pregunta 5 (MUIA)
+:: Dynamic Aeroelasticity
+:: The complete FEM (sometimes called GFEM, Global Finite Element Model) is directly used in flutter calculations {
+~yes, it is better to use this model to assure sinergy with the Stress Office and the Fatigue Department, typical users of this model
+=no, it is reduced in degrees of freedom and the DFEM is obtained for calculating the modal base
+~depending on the flutter mechanism, the GEM can be used
+}
+ 
+// Pregunta 6 (MUIA)
+:: Dynamic Aeroelasticity
+:: The flutter solver based on the k-Method is {
+~matched, with respect to the standard atmosphere
+=unmatched, with respect to the standard atmosphere
+~usually used for constant Mach calculations and density changing with the flight speed
+}
+ 
+// Pregunta 7 (GIA,MUIA)
+:: Dynamic Aeroelasticity
+:: Regulations state that the g=0 flutter condition must be {
+~above the maximum operational flight speed VC and diving Mach number MD
+~above the maximum operational flight speed VC and, preferrable, above the maximum diving speed VD
+~above the maximum operational flight speed VC and, preferrable, above the factorized maximum diving speed 1.15xVD
+=above the maximum operational flight speed VD and Mach number MD
+}
