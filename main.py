@@ -1,629 +1,974 @@
 from telethon import TelegramClient, events
 from telethon.tl.custom import Button
 from datetime import datetime, timedelta
-import os
-import re
 import csv
-from collections import defaultdict
-import calendar
+import os
+import unicodedata
 import openai
-import json
-from config import api_id, api_hash, bot_token, lista_profesores, openai_api_key
+import numpy as np
+import re
 
-# from config import api_id, api_hash, bot_token, lista_profesores
-# from metrics import ranking_usuarios, media_intentos, lista_usuarios
+# ===========================
+# CONFIGURACIÓN (config.py)
+# ===========================
+# En config.py define:
+#   api_id = <TU_API_ID_DE_TELEGRAM>
+#   api_hash = "<TU_API_HASH_DE_TELEGRAM>"
+#   bot_token = "<TU_BOT_TOKEN_DE_TELEGRAM>"
+#   openai_api_key = "<TU_API_KEY_DE_OPENAI>"
 
+from config import api_id, api_hash, bot_token, openai_api_key
+
+# ===========================
+# INICIALIZAR CLIENTES
+# ===========================
 client = TelegramClient('bot_session', api_id, api_hash).start(bot_token=bot_token)
-
 openai.api_key = openai_api_key
 
-# === FUNCIONES PARA ERASMUS ===
-def obtener_paises_erasmus(archivo='proyectos_erasmus.csv'):
-    paises = set()
-    if os.path.exists(archivo):
-        with open(archivo, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                paises.add(row['pais'])
-    return sorted(paises)
+# ===========================
+# NORMALIZACIÓN DE TEXTO
+# ===========================
+def normalizar(texto: str) -> str:
+    """
+    Convierte texto a minúsculas y quita tildes/acentos.
+    Ejemplo: "Róterdam" -> "rotterdam"
+    """
+    nfkd = unicodedata.normalize("NFKD", texto)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).lower()
 
-def obtener_proyectos_por_pais(pais, archivo='proyectos_erasmus.csv'):
-    proyectos = []
-    if os.path.exists(archivo):
-        with open(archivo, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row['pais'] == pais:
-                    proyectos.append(row)
-    return proyectos
-
-def extraer_fechas_inicio_fin(fechas_str):
-    # Busca patrones como '1-30 junio 2025', '28 junio - 5 julio 2025', '10-20 julio 2025', '12 julio 2025', etc.
-    meses_es = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"]
-    fechas_str = fechas_str.lower().replace('–', '-').replace('—', '-')
-    # 1-30 junio 2025
-    m = re.match(r'(\d{1,2})-(\d{1,2})\s+([a-záéíóúñ]+)\s+(\d{4})', fechas_str)
-    if m:
-        dia_ini, dia_fin, mes, anio = m.groups()
-        mes_num = meses_es.index(mes) + 1
-        return (datetime(int(anio), mes_num, int(dia_ini)), datetime(int(anio), mes_num, int(dia_fin)))
-    # 28 junio - 5 julio 2025
-    m = re.match(r'(\d{1,2})\s+([a-záéíóúñ]+)\s*-\s*(\d{1,2})\s+([a-záéíóúñ]+)\s+(\d{4})', fechas_str)
-    if m:
-        dia_ini, mes_ini, dia_fin, mes_fin, anio = m.groups()
-        mes_ini_num = meses_es.index(mes_ini) + 1
-        mes_fin_num = meses_es.index(mes_fin) + 1
-        return (datetime(int(anio), mes_ini_num, int(dia_ini)), datetime(int(anio), mes_fin_num, int(dia_fin)))
-    # 12-20 julio 2025
-    m = re.match(r'(\d{1,2})-(\d{1,2})\s+([a-záéíóúñ]+)\s+(\d{4})', fechas_str)
-    if m:
-        dia_ini, dia_fin, mes, anio = m.groups()
-        mes_num = meses_es.index(mes) + 1
-        return (datetime(int(anio), mes_num, int(dia_ini)), datetime(int(anio), mes_num, int(dia_fin)))
-    # 12 julio 2025
-    m = re.match(r'(\d{1,2})\s+([a-záéíóúñ]+)\s+(\d{4})', fechas_str)
-    if m:
-        dia, mes, anio = m.groups()
-        mes_num = meses_es.index(mes) + 1
-        return (datetime(int(anio), mes_num, int(dia)), datetime(int(anio), mes_num, int(dia)))
-    return (None, None)
-
-def meses_entre_fechas(dt_ini, dt_fin):
-    meses = []
-    meses_es = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
-    if not dt_ini or not dt_fin:
-        return meses
-    y, m = dt_ini.year, dt_ini.month
-    while (y < dt_fin.year) or (y == dt_fin.year and m <= dt_fin.month):
-        meses.append(f"{meses_es[m-1]} {y}")
-        if m == 12:
-            m = 1
-            y += 1
-        else:
-            m += 1
-    return meses
-
-def obtener_meses_erasmus(archivo='proyectos_erasmus.csv'):
-    meses = set()
-    if os.path.exists(archivo):
-        with open(archivo, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                dt_ini, dt_fin = extraer_fechas_inicio_fin(row['fechas'])
-                for mes in meses_entre_fechas(dt_ini, dt_fin):
-                    meses.add(mes)
-    meses = list(meses)
-    meses.sort(key=lambda x: (int(x.split()[-1]), ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"].index(x.split()[0])))
-    return meses
-
-def obtener_proyectos_por_mes(mes, archivo='proyectos_erasmus.csv'):
-    proyectos = []
-    if os.path.exists(archivo):
-        with open(archivo, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                dt_ini, dt_fin = extraer_fechas_inicio_fin(row['fechas'])
-                if mes in meses_entre_fechas(dt_ini, dt_fin):
-                    proyectos.append((dt_ini, dt_fin, row))
-    proyectos.sort(key=lambda x: x[0] if x[0] else datetime(2100,1,1))
-    return proyectos
-# === FIN FUNCIONES ERASMUS ===
-
-def verificar_registro(user_id):
-    if os.path.exists('usuarios.csv'):
-        with open('usuarios.csv', 'r', newline='', encoding='utf-8') as file:
-            reader = csv.reader(file)
-            for row in reader:
-                if row[0] == str(user_id):
-                    return True
-    return False
-
-# Añadir variable de contexto de navegación por usuario
-client._contexto_navegacion = getattr(client, '_contexto_navegacion', {})
-
-@client.on(events.NewMessage(pattern='/start'))
-async def start(event):
-    user_id = str(event.sender_id)
-    client._contexto_navegacion[user_id] = None  # Reset contexto
-    if not verificar_registro(user_id):
-        await registrar_correo(event)
-    else:
-        buttons = [
-            [Button.inline('🌍 Buscar por país', 'paises')],
-            [Button.inline('📅 Buscar por mes', 'meses')],
-            [Button.inline('⏳ Deadline próxima', 'deadline_proxima')]
-        ]
-        await event.respond('¿Cómo quieres buscar proyectos Erasmus?\n\nTambién puedes escribir directamente lo que buscas, por ejemplo: "Busco algo en julio" o "Quiero proyectos en Italia".', buttons=buttons)
-
-async def registrar_correo(event):
-    user_id = str(event.sender_id)
-    respuesta = await event.respond("Bienvenido! Para empezar, por favor regístrate introduciendo tu correo (@alumnos.upm.es) de la UPM.")
-    # Estado de registro temporal
-    client._registro_usuarios = getattr(client, '_registro_usuarios', {})
-    client._registro_usuarios[user_id] = {'estado': 'esperando_correo', 'mensaje_id': respuesta.id}
-
-# Helper: Load all projects from CSV
+# ===========================
+# CARGAR PROYECTOS DESDE CSV (fechas en ISO)
+# ===========================
 def cargar_todos_los_proyectos(archivo='proyectos_erasmus.csv'):
+    """
+    Lee un CSV con columnas:
+      pais,ciudad,titulo,descripcion,fecha_inicio,fecha_fin,
+      requisitos,gastos_cubiertos,contacto,enlace,deadline
+    (fechas en formato ISO YYYY-MM-DD).
+    Devuelve lista de diccionarios con:
+      - texto (str)
+      - fecha_inicio, fecha_fin, deadline como datetime.date o None
+    """
     proyectos = []
-    if os.path.exists(archivo):
-        with open(archivo, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                proyectos.append(row)
+    if not os.path.exists(archivo):
+        return proyectos
+
+    with open(archivo, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for fila in reader:
+            try:
+                fecha_ini = datetime.strptime(fila['fecha_inicio'], '%Y-%m-%d').date()
+            except Exception:
+                fecha_ini = None
+            try:
+                fecha_fin = datetime.strptime(fila['fecha_fin'], '%Y-%m-%d').date()
+            except Exception:
+                fecha_fin = None
+            try:
+                deadline = datetime.strptime(fila['deadline'], '%Y-%m-%d').date()
+            except Exception:
+                deadline = None
+
+            proyectos.append({
+                'pais': fila['pais'].strip(),
+                'ciudad': fila['ciudad'].strip(),
+                'titulo': fila['titulo'].strip(),
+                'descripcion': fila['descripcion'].strip(),
+                'fecha_inicio': fecha_ini,
+                'fecha_fin': fecha_fin,
+                'requisitos': fila.get('requisitos', '').strip(),
+                'gastos_cubiertos': fila.get('gastos_cubiertos', '').strip(),
+                'contacto': fila.get('contacto', '').strip(),
+                'enlace': fila.get('enlace', '').strip(),
+                'deadline': deadline
+            })
     return proyectos
 
-def obtener_lista_paises(archivo='proyectos_erasmus.csv'):
-    paises = set()
-    if os.path.exists(archivo):
-        with open(archivo, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                paises.add(row['pais'].strip().lower())
-    return paises
-
-# Helper para filtrar proyectos con deadline próxima
-def filtrar_deadline_proxima(proyectos, dias=14):
-    hoy = datetime.now().date()
-    proximos = []
-    for p in proyectos:
-        deadline_str = p.get('deadline') or p.get('deadline', '')
-        try:
-            deadline = datetime.strptime(deadline_str, '%d %B %Y').date()
-        except ValueError:
-            try:
-                deadline = datetime.strptime(deadline_str, '%d %b %Y').date()
-            except Exception:
-                continue
-        if (deadline - hoy).days >= 0 and (deadline - hoy).days <= dias:
-            proximos.append(p)
-    return proximos
-
-# Helper: Buscar proyectos relevantes usando OpenAI
-async def buscar_proyectos_nlp(query, proyectos):
-    from openai import AsyncOpenAI
-    import json
-    client_openai = AsyncOpenAI(api_key=openai_api_key)
-    contexto = "".join([
-        f"Título: {p['titulo']}, País: {p['pais']}, Ciudad: {p['ciudad']}, Fechas: {p['fechas']}, Descripción: {p['descripcion']}\n"
-        for p in proyectos
-    ])
-    ejemplos = """
-Ejemplos de uso:
-Usuario: Italia
-Respuesta: Devuelve proyectos en Italia.
-Usuario: Busco algo en julio
-Respuesta: Devuelve proyectos que ocurren en julio.
-Usuario: Quiero proyectos en Alemania sobre energía
-Respuesta: Devuelve proyectos en Alemania relacionados con energía.
-Usuario: Madrid
-Respuesta: Devuelve proyectos en Madrid.
-"""
-    prompt = f"""
-Eres un asistente que ayuda a encontrar proyectos Erasmus. El usuario puede preguntar por país, ciudad, mes, temática, etc. Si la consulta es solo un país, busca proyectos en ese país. Si es una ciudad, busca en esa ciudad. Si es un mes, busca en ese mes. Si es una temática, busca por descripción. Devuelve la respuesta en formato JSON con una lista llamada 'proyectos', cada uno con las claves: titulo, pais, ciudad, fechas, descripcion, requisitos, gastos_cubiertos, contacto, enlace. Si no hay nada relevante, la lista debe estar vacía. Base de datos:
-{contexto}
-{ejemplos}
-El usuario pregunta: '{query}'
-"""
-    try:
-        response = await client_openai.chat.completions.create(
-            model="gpt-4o-mini-2024-07-18",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
-            temperature=0.2,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content.strip()
-        try:
-            data = json.loads(content)
-            return data.get('proyectos', [])
-        except json.JSONDecodeError:
-            # Fallback: intenta buscar por país si la consulta es solo un país
-            paises = obtener_lista_paises()
-            consulta = query.strip().lower()
-            if consulta in paises:
-                return 'FALLBACK_PAIS', consulta
-            return "Ocurrió un error al procesar la respuesta de la IA. Intenta de nuevo o usa otra consulta."
-    except Exception as e:
-        return f"Ocurrió un error al buscar proyectos: {e}"
-
-@client.on(events.NewMessage)
-async def message_handler(event):
-    if event.out:
-        return
-    user_id = str(event.sender_id)
-    client._registro_usuarios = getattr(client, '_registro_usuarios', {})
-    if user_id in client._registro_usuarios and client._registro_usuarios[user_id].get('estado') == 'esperando_correo':
-        correo = event.text.strip()
-        if re.match(r'^[a-zA-Z0-9_.+-]+@alumnos.upm.es$', correo):
-            usuarios = []
-            if os.path.exists('usuarios.csv'):
-                with open('usuarios.csv', 'r', newline='', encoding='utf-8') as file:
-                    reader = csv.reader(file)
-                    usuarios = list(reader)
-            usuarios = [row for row in usuarios if row[0] != user_id]
-            usuarios.append([user_id, correo])
-            with open('usuarios.csv', 'w', newline='', encoding='utf-8') as file:
-                writer = csv.writer(file)
-                writer.writerows(usuarios)
-            del client._registro_usuarios[user_id]
-            await event.respond('Registro completado con éxito.')
-            buttons = [
-                [Button.inline('🌍 Buscar por país', 'paises')],
-                [Button.inline('📅 Buscar por mes', 'meses')],
-                [Button.inline('⏳ Deadline próxima', 'deadline_proxima')]
-            ]
-            await event.respond('¿Cómo quieres buscar proyectos Erasmus?\n\nTambién puedes escribir directamente lo que buscas, por ejemplo: "Busco algo en julio" o "Quiero proyectos en Italia".', buttons=buttons)
-        return
-    # Si no es comando ni registro, usa NLP
-    if event.text.startswith('/'):
-        return  # deja que otros handlers gestionen comandos
-    # Procesa consulta natural
-    consulta = event.text.strip()
-    proyectos = cargar_todos_los_proyectos()
-    # Fallback directo si la consulta es solo un país conocido
-    paises = obtener_lista_paises()
-    if consulta.lower() in paises:
-        proyectos_pais = obtener_proyectos_por_pais(consulta)
-        if not proyectos_pais:
-            await event.respond(f'No hay proyectos Erasmus registrados para {consulta.title()}.')
-            return
-        buttons = [[Button.inline(f"{p['titulo']} ({p['ciudad']})", f'proy_{i}_{consulta}')]
-                   for i, p in enumerate(proyectos_pais)]
-        buttons.append([Button.inline('🏠 Volver al inicio', 'start')])
-        await event.respond(f'Proyectos Erasmus en {consulta.title()}:', buttons=buttons)
-        return
-    # Mensaje de "buscando..."
-    buscando_msg = await event.respond('🔎 Buscando proyectos que encajen con tu búsqueda...')
-    resultados = await buscar_proyectos_nlp(consulta, proyectos)
-    # Fallback si la IA detecta país
-    if isinstance(resultados, tuple) and resultados[0] == 'FALLBACK_PAIS':
-        pais = resultados[1]
-        proyectos_pais = obtener_proyectos_por_pais(pais.title())
-        if not proyectos_pais:
-            await buscando_msg.edit(f'No hay proyectos Erasmus registrados para {pais.title()}.')
-            return
-        buttons = [[Button.inline(f"{p['titulo']} ({p['ciudad']})", f'proy_{i}_{pais}')]
-                   for i, p in enumerate(proyectos_pais)]
-        buttons.append([Button.inline('🏠 Volver al inicio', 'start')])
-        await buscando_msg.edit(f'Proyectos Erasmus en {pais.title()}:', buttons=buttons)
-        return
-    if isinstance(resultados, str):
-        await buscando_msg.edit(resultados)
-        return
-    if not resultados:
-        await buscando_msg.edit('No se encontraron proyectos relevantes para tu consulta.')
-        return
-    # Guardar resultados en contexto de usuario
-    client._contexto_navegacion[user_id] = {'tipo': 'nlp', 'resultados': resultados, 'idx': 0, 'msg_id': buscando_msg.id}
-    n = len(resultados)
-    if n > 1:
-        aviso = f"<i>Hemos encontrado {n} resultados para ti según tu búsqueda. Puedes navegar con los botones de abajo.</i>"
-    else:
-        aviso = f"<i>Hemos encontrado 1 resultado para ti según tu búsqueda.</i>"
-    await buscando_msg.edit(aviso, parse_mode='html')
-    project_msg = await event.respond('Cargando proyecto...')
-    client._contexto_navegacion[user_id]['project_msg_id'] = project_msg.id
-    await mostrar_proyecto_nlp(project_msg, user_id, 0)
-
+# ===========================
+# FORMATEAR PROYECTO PARA MENSAJE
+# ===========================
 def formatear_proyecto(p, mostrar_dias_deadline=False):
-    texto = f"<b>{p.get('titulo','')}</b>\n\n"
-    texto += f"<b>País:</b> {p.get('pais','')}\n"
-    texto += f"<b>Ciudad:</b> {p.get('ciudad','')}\n"
-    # Fechas
-    fechas = p.get('fechas','')
-    if fechas:
-        partes = fechas.split()
-        if '-' in partes[0]:
-            # Ejemplo: 1-15 junio 2025
-            fechas_split = partes[0].split('-')
-            if len(fechas_split) == 2:
-                texto += f"<b>Fecha inicio:</b> {fechas_split[0]}/{partes[1]}/{partes[2]}\n"
-                texto += f"<b>Fecha final:</b> {fechas_split[1]}/{partes[1]}/{partes[2]}\n"
-            else:
-                texto += f"<b>Fechas:</b> {fechas}\n"
-        elif len(partes) >= 3:
-            texto += f"<b>Fecha:</b> {fechas}\n"
-        else:
-            texto += f"<b>Fechas:</b> {fechas}\n"
+    """
+    Devuelve un texto HTML con emojis y negritas
+    para mostrar la información del proyecto 'p'.
+    """
+    texto = f"📌 <b>{p['titulo']}</b>\n\n"
+    texto += f"🌍 <b>País:</b> {p['pais']}    📌 <b>Ciudad:</b> {p['ciudad']}\n"
+
+    if p['fecha_inicio']:
+        inicio = p['fecha_inicio'].strftime("%d/%m/%Y")
     else:
-        texto += f"<b>Fechas:</b> -\n"
-    texto += f"<b>Descripción:</b> {p.get('descripcion','')}\n"
-    if p.get('requisitos'):
-        texto += f"<b>Requisitos:</b> {p['requisitos']}\n"
-    if p.get('gastos_cubiertos'):
-        texto += f"<b>Gastos cubiertos:</b> {p['gastos_cubiertos']}\n"
-    if p.get('contacto'):
-        texto += f"<b>Contacto:</b> {p['contacto']}\n"
-    if p.get('enlace'):
-        texto += f"<b>Enlace:</b> {p['enlace']}\n"
-    if p.get('deadline'):
-        texto += f"<b>🗓️ Deadline para aplicar:</b> {p['deadline']}"
+        inicio = "-"
+    if p['fecha_fin']:
+        fin = p['fecha_fin'].strftime("%d/%m/%Y")
+    else:
+        fin = "-"
+    texto += f"📅 <b>Inicio:</b> {inicio}    ⏳ <b>Fin:</b> {fin}\n\n"
+
+    if p['descripcion']:
+        texto += f"📝 <b>Descripción:</b>\n{p['descripcion']}\n\n"
+    if p['requisitos']:
+        texto += f"✅ <b>Requisitos:</b>\n{p['requisitos']}\n\n"
+    if p['gastos_cubiertos']:
+        texto += f"💶 <b>Gastos cubiertos:</b>\n{p['gastos_cubiertos']}\n\n"
+    if p['contacto']:
+        texto += f"📧 <b>Contacto:</b> {p['contacto']}\n"
+    if p['enlace']:
+        texto += f"🔗 <b>Enlace:</b> {p['enlace']}\n"
+
+    if p['deadline']:
+        texto += f"\n⏰ <b>Deadline:</b> {p['deadline'].strftime('%d/%m/%Y')}"
         if mostrar_dias_deadline:
-            try:
-                deadline = datetime.strptime(p['deadline'], '%d %B %Y').date()
-            except ValueError:
-                try:
-                    deadline = datetime.strptime(p['deadline'], '%d %b %Y').date()
-                except Exception:
-                    deadline = None
-            if deadline:
-                dias = (deadline - datetime.now().date()).days
-                if dias >= 0:
-                    texto += f"  <b>({dias} días para cierre)</b>"
+            dias_rest = (p['deadline'] - datetime.now().date()).days
+            if dias_rest >= 0:
+                texto += f"  (<b>{dias_rest} días restantes</b>)"
         texto += "\n"
+
     return texto
 
-# Nueva función para mostrar un proyecto NLP con botones de navegación (edita el mensaje del proyecto)
-async def mostrar_proyecto_nlp(event_or_msg, user_id, idx):
-    ctx = client._contexto_navegacion.get(user_id, {})
-    resultados = ctx.get('resultados', [])
-    n = len(resultados)
-    if not resultados or idx < 0 or idx >= n:
-        await event_or_msg.edit('No se pudo mostrar el proyecto seleccionado.')
-        return
-    p = resultados[idx]
-    texto = formatear_proyecto(p, mostrar_dias_deadline=True)
-    # Botones de navegación
-    nav_buttons = []
-    # Anterior (vacío si idx==0)
-    if idx == 0:
-        nav_buttons.append(Button.inline(' ', 'nlp_dummy'))
-    else:
-        nav_buttons.append(Button.inline('⬅️ Anterior', f'nlp_prev_{idx-1}'))
-    # x/n SIEMPRE visible
-    nav_buttons.append(Button.inline(f'{idx+1}/{n}', 'nlp_dummy'))
-    # Siguiente (vacío si idx==n-1)
-    if idx == n-1:
-        nav_buttons.append(Button.inline(' ', 'nlp_dummy'))
-    else:
-        nav_buttons.append(Button.inline('Siguiente ➡️', f'nlp_next_{idx+1}'))
-    buttons = [nav_buttons]
-    buttons.append([Button.inline('🏠 Volver al inicio', 'start')])
-    await event_or_msg.edit(texto, buttons=buttons, parse_mode='html')
+# ===========================
+# FILTRADOS MANUALES
+# ===========================
+MESES_ES = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+]
+MESES_NORMAL = [normalizar(m) for m in MESES_ES]
 
-# Handler para navegación NLP (edita el mensaje del proyecto)
-@client.on(events.CallbackQuery(pattern=b'nlp_(prev|next)_\d+'))
-async def nlp_nav_handler(event):
+def obtener_lista_paises(proyectos):
+    """Retorna lista ordenada de países únicos en los proyectos."""
+    return sorted({p['pais'] for p in proyectos})
+
+def obtener_lista_ciudades(proyectos):
+    """Retorna lista ordenada de ciudades únicas en los proyectos."""
+    return sorted({p['ciudad'] for p in proyectos})
+
+def filtrar_por_pais(proyectos, pais):
+    """
+    Filtra proyectos donde p['pais'] == pais.
+    Ordena por fecha_inicio ascendente.
+    """
+    r = [p for p in proyectos if p['pais'] == pais]
+    r.sort(key=lambda x: x['fecha_inicio'] or datetime.max.date())
+    return r
+
+def filtrar_por_ciudad(proyectos, ciudad):
+    """
+    Filtra proyectos donde p['ciudad'] == ciudad.
+    Ordena por fecha_inicio ascendente.
+    """
+    r = [p for p in proyectos if p['ciudad'] == ciudad]
+    r.sort(key=lambda x: x['fecha_inicio'] or datetime.max.date())
+    return r
+
+def filtrar_por_mes(proyectos, mes_norm):
+    """
+    Filtra proyectos cuyo mes de 'fecha_inicio' coincide con mes_norm (sin tildes).
+    Ordena por fecha_inicio.
+    """
+    try:
+        idx_mes = MESES_NORMAL.index(mes_norm) + 1
+    except ValueError:
+        return []
+    r = []
+    for p in proyectos:
+        if p['fecha_inicio'] and p['fecha_inicio'].month == idx_mes:
+            r.append(p)
+    r.sort(key=lambda x: x['fecha_inicio'])
+    return r
+
+def filtrar_por_rango(proyectos, inicio, fin):
+    """
+    Filtra proyectos cuya 'fecha_inicio' está entre inicio y fin inclusive.
+    Ordena por fecha_inicio.
+    """
+    r = []
+    for p in proyectos:
+        if p['fecha_inicio'] and inicio <= p['fecha_inicio'] <= fin:
+            r.append(p)
+    r.sort(key=lambda x: x['fecha_inicio'])
+    return r
+
+def filtrar_deadline_proxima(proyectos, dias=14):
+    """
+    Retorna proyectos cuya 'deadline' esté entre hoy y hoy+dias.
+    Ordena por deadline ascendente.
+    """
+    hoy = datetime.now().date()
+    r = []
+    for p in proyectos:
+        if p['deadline']:
+            diff = (p['deadline'] - hoy).days
+            if 0 <= diff <= dias:
+                r.append(p)
+    r.sort(key=lambda x: x['deadline'])
+    return r
+
+# ===========================
+# BÚSQUEDA SEMÁNTICA CON EMBEDDINGS
+# ===========================
+def calcular_embeds_proyectos(proyectos):
+    """
+    Calcula y devuelve una lista de embeddings para cada proyecto,
+    usando 'Título + Descripción' como texto fuente.
+    """
+    textos = []
+    for p in proyectos:
+        txt = f"{p['titulo']}. {p['descripcion']}"
+        textos.append(txt)
+
+    # Llamada a la nueva API de embeddings de OpenAI en lote
+    resp = openai.embeddings.create(model="text-embedding-3-small", input=textos)
+    embeddings = [np.array(d.embedding) for d in resp.data]
+    return embeddings  # lista de arrays np
+
+def buscar_proyectos_semantico(query, proyectos, embeddings_proyectos, top_k=5):
+    """
+    Dada una consulta en lenguaje natural, calcula su embedding y
+    obtiene las distancias coseno con los embeddings de proyectos.
+    Devuelve los índices de los 'top_k' proyectos más similares.
+    """
+    resp = openai.embeddings.create(model="text-embedding-3-small", input=[query])
+    embed_query = np.array(resp.data[0].embedding)
+
+    sims = []
+    for idx, emb_p in enumerate(embeddings_proyectos):
+        cos = np.dot(embed_query, emb_p) / (np.linalg.norm(embed_query) * np.linalg.norm(emb_p))
+        sims.append((cos, idx))
+
+    sims.sort(reverse=True, key=lambda x: x[0])
+    resultados = [idx for cos, idx in sims if cos >= 0.7]
+    if not resultados:
+        resultados = [idx for _, idx in sims[:top_k]]
+    else:
+        resultados = resultados[:top_k]
+    return resultados
+
+# ===========================
+# CONTEXTO DE NAVEGACIÓN POR USUARIO
+# ===========================
+# Guardamos para cada user_id un dict con {'modo': <modo>, 'lista': <lista_filtrada>}.
+# Además, almacenamos los embeddings de proyectos en memoria.
+client._contexto = getattr(client, '_contexto', {})
+client._embeddings = None  # Aquí cargaremos embeddings al arrancar
+
+# ===========================
+# INICIALIZAR EMBEDDINGS (al arrancar el bot)
+# ===========================
+@client.on(events.NewMessage(pattern='/start'))
+async def initialize_and_start(event):
+    """
+    Cuando alguien envía /start, nos aseguramos de cargar los embeddings
+    si aún no se han calculado, para usarlos luego en búsquedas semánticas.
+    """
     user_id = str(event.sender_id)
-    data = event.data.decode()
-    m = re.match(r'nlp_(prev|next)_(\d+)', data)
-    if not m:
-        await event.answer('Navegación inválida')
-        return
-    idx = int(m.group(2))
-    client._contexto_navegacion = getattr(client, '_contexto_navegacion', {})
-    if user_id not in client._contexto_navegacion or client._contexto_navegacion[user_id].get('tipo') != 'nlp':
-        await event.answer('No hay resultados para navegar.')
-        return
-    client._contexto_navegacion[user_id]['idx'] = idx
-    project_msg_id = client._contexto_navegacion[user_id].get('project_msg_id')
-    # Recupera el mensaje del proyecto para editarlo
-    msg = await event.get_message()
-    await mostrar_proyecto_nlp(msg, user_id, idx)
+    if client._embeddings is None:
+        proyectos = cargar_todos_los_proyectos()
+        client._embeddings = calcular_embeds_proyectos(proyectos)
 
+    client._contexto[user_id] = None
+    botones = [
+        [Button.inline('🌍 Buscar por país', 'menu_paises')],
+        [Button.inline('📅 Buscar por mes', 'menu_meses')],
+        [Button.inline('📆 Buscar entre fechas', 'menu_rango')],
+        [Button.inline('⏳ Deadline próxima', 'menu_deadline')]
+    ]
+    await event.respond(
+        '¡Hola! Este bot te ayuda a encontrar proyectos Erasmus.\n\n'
+        'Puedes usar los botones:\n'
+        '• Buscar por país\n'
+        '• Buscar por mes\n'
+        '• Buscar entre fechas (YYYY-MM-DD)\n'
+        '• Deadline próxima (próximos 14 días)\n\n'
+        'O escribe tu consulta en lenguaje natural, por ejemplo:\n'
+        '"Busco un proyecto en Alemania a finales de julio que se centre en tecnología o innovación digital"\n'
+        'El orden de filtrado será:\n'
+        '1. Fechas + país/ciudad\n'
+        '2. Fechas solamente\n'
+        '3. País/ciudad + mes\n'
+        '4. País/ciudad solo o mes solo\n'
+        '5. Búsqueda semántica con embeddings.\n',
+        buttons=botones
+    )
+
+# ===========================
+# HANDLER DE MENSAJES DE TEXTO (NLP + FILTROS EN ORDEN)
+# ===========================
+@client.on(events.NewMessage)
+async def texto_libre(event):
+    if event.out:
+        return
+    texto_original = event.text.strip()
+    if texto_original.startswith('/'):
+        return
+
+    user_id = str(event.sender_id)
+    proyectos = cargar_todos_los_proyectos()
+    norm = normalizar(texto_original)
+
+    # Preparamos mapas de países y ciudades normalizadas → reales
+    lista_paises = obtener_lista_paises(proyectos)
+    mapa_paises_norm = {normalizar(p): p for p in lista_paises}
+    lista_ciudades = obtener_lista_ciudades(proyectos)
+    mapa_ciudades_norm = {normalizar(c): c for c in lista_ciudades}
+
+    # 1) Detectar país o ciudad
+    pais_detectado = None
+    for p_norm, p_real in mapa_paises_norm.items():
+        if p_norm in norm.split():
+            pais_detectado = p_real
+            break
+
+    ciudad_detectada = None
+    for c_norm, c_real in mapa_ciudades_norm.items():
+        if c_norm in norm.split():
+            ciudad_detectada = c_real
+            break
+
+    # 2) Detectar mes en español
+    mes_detectado = None
+    for m_norm, m_real in zip(MESES_NORMAL, MESES_ES):
+        if m_norm in norm:
+            mes_detectado = m_real
+            break
+
+    # 3) Detectar rango de fechas YYYY-MM-DD (si hay al menos 2 coincidencias)
+    fechas = re.findall(r'(\d{4}-\d{2}-\d{2})', texto_original)
+    rango_inicio = rango_fin = None
+    if len(fechas) >= 2:
+        try:
+            rango_inicio = datetime.strptime(fechas[0], '%Y-%m-%d').date()
+            rango_fin = datetime.strptime(fechas[1], '%Y-%m-%d').date()
+        except Exception:
+            rango_inicio = rango_fin = None
+
+    # 4) Extraer palabras clave restantes (todo lo que no sea país/ciudad/mes/fechas)
+    texto_sin_pm = norm
+    if pais_detectado:
+        texto_sin_pm = texto_sin_pm.replace(normalizar(pais_detectado), "")
+    if ciudad_detectada:
+        texto_sin_pm = texto_sin_pm.replace(normalizar(ciudad_detectada), "")
+    if mes_detectado:
+        texto_sin_pm = texto_sin_pm.replace(normalizar(mes_detectado), "")
+    for f in fechas:
+        texto_sin_pm = texto_sin_pm.replace(f, "")
+    palabras = [w for w in re.findall(r'\w+', texto_sin_pm) if len(w) >= 3]
+
+    # ======================================================
+    # ORDEN DE FILTRADO:
+    # 1) Fechas + País/Ciudad
+    # 2) Fechas solamente
+    # 3) País/Ciudad + Mes
+    # 4) País/Ciudad solo o Mes solo
+    # 5) Embeddings (semántico) dentro del subconjunto manual si hay palabras clave,
+    #    o en toda la base si no hay filtrado manual.
+    # ======================================================
+
+    # ---------------------------------
+    # 1) Fechas + País/Ciudad
+    # ---------------------------------
+    if rango_inicio and rango_fin and (pais_detectado or ciudad_detectada):
+        if pais_detectado:
+            base = filtrar_por_pais(proyectos, pais_detectado)
+        else:
+            base = filtrar_por_ciudad(proyectos, ciudad_detectada)
+
+        # Filtrar por rango sobre la base
+        filtrados = [p for p in base if p['fecha_inicio'] and rango_inicio <= p['fecha_inicio'] <= rango_fin]
+        filtrados.sort(key=lambda x: x['fecha_inicio'] or datetime.max.date())
+
+        # Si existen palabras clave, aplicar búsqueda semántica sobre este subconjunto
+        if palabras and filtrados:
+            textos_sub = [f"{p['titulo']}. {p['descripcion']}" for p in filtrados]
+            resp = openai.embeddings.create(model="text-embedding-3-small", input=textos_sub)
+            embeds_sub = [np.array(d.embedding) for d in resp.data]
+
+            resp_q = openai.embeddings.create(model="text-embedding-3-small", input=[" ".join(palabras)])
+            embed_q = np.array(resp_q.data[0].embedding)
+
+            sims = []
+            for idx, emb_p in enumerate(embeds_sub):
+                cos = np.dot(embed_q, emb_p) / (np.linalg.norm(embed_q) * np.linalg.norm(emb_p))
+                sims.append((cos, idx))
+            sims.sort(reverse=True, key=lambda x: x[0])
+            indices_sem = [idx for cos, idx in sims if cos >= 0.7]
+            if not indices_sem:
+                indices_sem = [idx for _, idx in sims[:5]]
+
+            resultados = [filtrados[i] for i in indices_sem]
+            client._contexto[user_id] = {'modo': 'rango_sem', 'lista': resultados}
+            botones = [
+                [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_rango_sem_{i}')]
+                for i, p in enumerate(resultados)
+            ]
+            botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+            await event.respond(
+                f"Resultados semánticos en {pais_detectado or ciudad_detectada} entre {fechas[0]} y {fechas[1]}:",
+                buttons=botones
+            )
+            return
+
+        # Si no hay palabras clave, devolvemos la lista completa
+        if filtrados:
+            client._contexto[user_id] = {'modo': 'rango', 'lista': filtrados}
+            botones = [
+                [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_rango_{i}')]
+                for i, p in enumerate(filtrados)
+            ]
+            botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+            await event.respond(
+                f"Proyectos en {pais_detectado or ciudad_detectada} entre {fechas[0]} y {fechas[1]}:",
+                buttons=botones
+            )
+            return
+        # Si no hay filtrados, continuamos al siguiente paso
+
+    # ---------------------------------
+    # 2) Fechas solamente
+    # ---------------------------------
+    if rango_inicio and rango_fin:
+        filtrados = filtrar_por_rango(proyectos, rango_inicio, rango_fin)
+
+        # Si existen palabras clave, aplicar semántico sobre este subconjunto
+        if palabras and filtrados:
+            textos_sub = [f"{p['titulo']}. {p['descripcion']}" for p in filtrados]
+            resp = openai.embeddings.create(model="text-embedding-3-small", input=textos_sub)
+            embeds_sub = [np.array(d.embedding) for d in resp.data]
+
+            resp_q = openai.embeddings.create(model="text-embedding-3-small", input=[" ".join(palabras)])
+            embed_q = np.array(resp_q.data[0].embedding)
+
+            sims = []
+            for idx, emb_p in enumerate(embeds_sub):
+                cos = np.dot(embed_q, emb_p) / (np.linalg.norm(embed_q) * np.linalg.norm(emb_p))
+                sims.append((cos, idx))
+            sims.sort(reverse=True, key=lambda x: x[0])
+            indices_sem = [idx for cos, idx in sims if cos >= 0.7]
+            if not indices_sem:
+                indices_sem = [idx for _, idx in sims[:5]]
+
+            resultados = [filtrados[i] for i in indices_sem]
+            client._contexto[user_id] = {'modo': 'rango_sem', 'lista': resultados}
+            botones = [
+                [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_rango_sem_{i}')]
+                for i, p in enumerate(resultados)
+            ]
+            botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+            await event.respond(
+                f"Resultados semánticos entre {fechas[0]} y {fechas[1]}:",
+                buttons=botones
+            )
+            return
+
+        if filtrados:
+            client._contexto[user_id] = {'modo': 'rango', 'lista': filtrados}
+            botones = [
+                [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_rango_{i}')]
+                for i, p in enumerate(filtrados)
+            ]
+            botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+            await event.respond(f"Proyectos entre {fechas[0]} y {fechas[1]}:", buttons=botones)
+            return
+        # Si no hay en ese rango, seguimos
+
+    # ---------------------------------
+    # 3) País/Ciudad + Mes
+    # ---------------------------------
+    if (pais_detectado or ciudad_detectada) and mes_detectado:
+        if pais_detectado:
+            base = filtrar_por_pais(proyectos, pais_detectado)
+            target = pais_detectado
+        else:
+            base = filtrar_por_ciudad(proyectos, ciudad_detectada)
+            target = ciudad_detectada
+
+        idx_mes = MESES_ES.index(mes_detectado) + 1
+        filtrados = [p for p in base if p['fecha_inicio'] and p['fecha_inicio'].month == idx_mes]
+        filtrados.sort(key=lambda x: x['fecha_inicio'] or datetime.max.date())
+
+        # Si hay palabras clave, búsqueda semántica sobre filtrados
+        if palabras and filtrados:
+            textos_sub = [f"{p['titulo']}. {p['descripcion']}" for p in filtrados]
+            resp = openai.embeddings.create(model="text-embedding-3-small", input=textos_sub)
+            embeds_sub = [np.array(d.embedding) for d in resp.data]
+
+            resp_q = openai.embeddings.create(model="text-embedding-3-small", input=[" ".join(palabras)])
+            embed_q = np.array(resp_q.data[0].embedding)
+
+            sims = []
+            for idx, emb_p in enumerate(embeds_sub):
+                cos = np.dot(embed_q, emb_p) / (np.linalg.norm(embed_q) * np.linalg.norm(emb_p))
+                sims.append((cos, idx))
+            sims.sort(reverse=True, key=lambda x: x[0])
+            indices_sem = [idx for cos, idx in sims if cos >= 0.7]
+            if not indices_sem:
+                indices_sem = [idx for _, idx in sims[:5]]
+
+            resultados = [filtrados[i] for i in indices_sem]
+            client._contexto[user_id] = {'modo': 'pais_mes_sem', 'lista': resultados}
+            botones = [
+                [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_pais_mes_sem_{i}')]
+                for i, p in enumerate(resultados)
+            ]
+            botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+            await event.respond(
+                f"Resultados semánticos en {target} durante {mes_detectado}:",
+                buttons=botones
+            )
+            return
+
+        if filtrados:
+            client._contexto[user_id] = {'modo': 'pais_mes', 'lista': filtrados}
+            botones = [
+                [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_pais_mes_{i}')]
+                for i, p in enumerate(filtrados)
+            ]
+            botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+            await event.respond(f"Proyectos en {target} durante {mes_detectado}:", buttons=botones)
+            return
+        # Si no hay coincidencias, seguimos
+
+    # ---------------------------------
+    # 4) País/Ciudad solo o Mes solo
+    # ---------------------------------
+    # 4a) País o Ciudad solo
+    if pais_detectado or ciudad_detectada:
+        if pais_detectado:
+            filtrados = filtrar_por_pais(proyectos, pais_detectado)
+            modo = 'pais'
+            target = pais_detectado
+        else:
+            filtrados = filtrar_por_ciudad(proyectos, ciudad_detectada)
+            modo = 'ciudad'
+            target = ciudad_detectada
+
+        # Si hay palabras clave, semántico sobre este subconjunto
+        if palabras and filtrados:
+            textos_sub = [f"{p['titulo']}. {p['descripcion']}" for p in filtrados]
+            resp = openai.embeddings.create(model="text-embedding-3-small", input=textos_sub)
+            embeds_sub = [np.array(d.embedding) for d in resp.data]
+
+            resp_q = openai.embeddings.create(model="text-embedding-3-small", input=[" ".join(palabras)])
+            embed_q = np.array(resp_q.data[0].embedding)
+
+            sims = []
+            for idx, emb_p in enumerate(embeds_sub):
+                cos = np.dot(embed_q, emb_p) / (np.linalg.norm(embed_q) * np.linalg.norm(emb_p))
+                sims.append((cos, idx))
+            sims.sort(reverse=True, key=lambda x: x[0])
+            indices_sem = [idx for cos, idx in sims if cos >= 0.7]
+            if not indices_sem:
+                indices_sem = [idx for _, idx in sims[:5]]
+
+            resultados = [filtrados[i] for i in indices_sem]
+            client._contexto[user_id] = {'modo': f'{modo}_sem', 'lista': resultados}
+            botones = [
+                [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_{modo}_sem_{i}')]
+                for i, p in enumerate(resultados)
+            ]
+            botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+            await event.respond(f"Resultados semánticos en {target}:", buttons=botones)
+            return
+
+        # Si no hay palabras clave, devolvemos la lista manual
+        if filtrados:
+            client._contexto[user_id] = {'modo': modo, 'lista': filtrados}
+            botones = [
+                [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_{modo}_{i}')]
+                for i, p in enumerate(filtrados)
+            ]
+            botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+            await event.respond(f"Proyectos en {target}:", buttons=botones)
+            return
+        # Si no hay proyectos en ese país/ciudad, seguimos
+
+    # 4b) Mes solo
+    if mes_detectado:
+        idx_mes = MESES_ES.index(mes_detectado) + 1
+        filtrados = [p for p in proyectos if p['fecha_inicio'] and p['fecha_inicio'].month == idx_mes]
+        filtrados.sort(key=lambda x: x['fecha_inicio'] or datetime.max.date())
+
+        if palabras and filtrados:
+            textos_sub = [f"{p['titulo']}. {p['descripcion']}" for p in filtrados]
+            resp = openai.embeddings.create(model="text-embedding-3-small", input=textos_sub)
+            embeds_sub = [np.array(d.embedding) for d in resp.data]
+
+            resp_q = openai.embeddings.create(model="text-embedding-3-small", input=[" ".join(palabras)])
+            embed_q = np.array(resp_q.data[0].embedding)
+
+            sims = []
+            for idx, emb_p in enumerate(embeds_sub):
+                cos = np.dot(embed_q, emb_p) / (np.linalg.norm(embed_q) * np.linalg.norm(emb_p))
+                sims.append((cos, idx))
+            sims.sort(reverse=True, key=lambda x: x[0])
+            indices_sem = [idx for cos, idx in sims if cos >= 0.7]
+            if not indices_sem:
+                indices_sem = [idx for _, idx in sims[:5]]
+
+            resultados = [filtrados[i] for i in indices_sem]
+            client._contexto[user_id] = {'modo': 'mes_sem', 'lista': resultados}
+            botones = [
+                [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_mes_sem_{i}')]
+                for i, p in enumerate(resultados)
+            ]
+            botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+            await event.respond(f"Resultados semánticos en {mes_detectado}:", buttons=botones)
+            return
+
+        if filtrados:
+            client._contexto[user_id] = {'modo': 'mes', 'lista': filtrados}
+            botones = [
+                [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_mes_{i}')]
+                for i, p in enumerate(filtrados)
+            ]
+            botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+            await event.respond(f"Proyectos en {mes_detectado}:", buttons=botones)
+            return
+        # Si no hay proyectos en ese mes, seguimos
+
+    # ---------------------------------
+    # 5) FALLBACK: Búsqueda semántica en TODO el dataset
+    # ---------------------------------
+    msg_buscando = await event.respond("🔎 Buscando proyectos semánticamente con embeddings en toda la base...")
+    embeddings = client._embeddings or []
+    if not embeddings:
+        embeddings = calcular_embeds_proyectos(proyectos)
+        client._embeddings = embeddings
+
+    resp_q = openai.embeddings.create(model="text-embedding-3-small", input=[texto_original])
+    embed_q = np.array(resp_q.data[0].embedding)
+
+    sims = []
+    for idx, emb_p in enumerate(embeddings):
+        cos = np.dot(embed_q, emb_p) / (np.linalg.norm(embed_q) * np.linalg.norm(emb_p))
+        sims.append((cos, idx))
+    sims.sort(reverse=True, key=lambda x: x[0])
+    indices_sem = [idx for cos, idx in sims if cos >= 0.7]
+    if not indices_sem:
+        indices_sem = [idx for _, idx in sims[:5]]
+
+    resultados = [proyectos[i] for i in indices_sem]
+    if not resultados:
+        await msg_buscando.edit(
+            "No se encontraron proyectos relevantes para tu consulta.\n\n"
+            "Prueba a usar un país, ciudad, mes, rango de fechas (YYYY-MM-DD) o palabras clave."
+        )
+        return
+
+    client._contexto[user_id] = {'modo': 'nlp', 'lista': resultados}
+    botones = [
+        [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_nlp_{i}')]
+        for i, p in enumerate(resultados)
+    ]
+    botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+    await msg_buscando.edit(f"Hemos encontrado {len(resultados)} proyecto(s) semánticamente similares en toda la base:", buttons=botones)
+
+# ===========================
+# CALLBACKS PARA BOTONES
+# ===========================
 @client.on(events.CallbackQuery)
 async def callback_query_handler(event):
     data = event.data.decode()
     user_id = str(event.sender_id)
-    client._contexto_navegacion = getattr(client, '_contexto_navegacion', {})
-    if event.sender_id in lista_profesores:
-        if event.data == b'confirmar_reset':
-            if os.path.exists('usuarios.csv'):
-                os.remove('usuarios.csv')
-            await event.edit('Datos de usuarios borrados con éxito.')
-        elif event.data == b'cancelar_reset':
-            await event.edit('Acción cancelada. Los datos no fueron borrados.')
-    if data.startswith('pais_'):
-        pais = data.split('pais_')[1]
-        proyectos = obtener_proyectos_por_pais(pais)
-        client._contexto_navegacion[user_id] = {'tipo': 'pais', 'valor': pais}
-        if not proyectos:
-            await event.edit(f'No hay proyectos Erasmus registrados para {pais}.')
-            return
-        buttons = [[Button.inline(f"{p['titulo']} ({p['ciudad']})", f'proy_{i}_{pais}')] for i, p in enumerate(proyectos)]
-        buttons.append([Button.inline('🏠 Volver al inicio', 'start')])
-        await event.edit(f'Proyectos Erasmus en {pais}:', buttons=buttons)
-    elif data.startswith('mes_'):
-        mes = data.split('mes_')[1]
-        proyectos = obtener_proyectos_por_mes(mes)
-        client._contexto_navegacion[user_id] = {'tipo': 'mes', 'valor': mes}
-        if not proyectos:
-            await event.edit(f'No hay proyectos Erasmus registrados para {mes}.')
-            return
-        buttons = [[Button.inline(f"{p[2]['titulo']} ({p[2]['ciudad']}, {p[2]['pais']})", f'proy_mes_{i}_{mes}')] for i, p in enumerate(proyectos)]
-        buttons.append([Button.inline('🏠 Volver al inicio', 'start')])
-        await event.edit(f'Proyectos Erasmus en {mes}:', buttons=buttons)
-    elif data.startswith('proy_mes_'):
-        _, _, idx, mes = data.split('_', 3)
-        proyectos = obtener_proyectos_por_mes(mes)
-        try:
-            idx = int(idx)
-            print(f"[DEBUG] proy_mes_: idx={idx}, total proyectos={len(proyectos)}")
-            if not proyectos:
-                await event.edit('No hay proyectos para este mes.')
-                return
-            if idx < 0 or idx >= len(proyectos):
-                await event.edit(f'Índice fuera de rango. Proyectos: {len(proyectos)}, idx: {idx}')
-                return
-            dt_ini, dt_fin, row = proyectos[idx]
-            texto = f"<b>{row['titulo']}</b>\n\n"
-            texto += f"<b>País:</b> {row['pais']}\n"
-            texto += f"<b>Ciudad:</b> {row['ciudad']}\n"
-            texto += f"<b>Fecha inicio:</b> {dt_ini.strftime('%d/%m/%Y') if dt_ini else '-'}\n"
-            texto += f"<b>Fecha final:</b> {dt_fin.strftime('%d/%m/%Y') if dt_fin else '-'}\n"
-            texto += f"<b>Descripción:</b> {row['descripcion']}\n"
-            if row['requisitos']:
-                texto += f"<b>Requisitos:</b> {row['requisitos']}\n"
-            if row['gastos_cubiertos']:
-                texto += f"<b>Gastos cubiertos:</b> {row['gastos_cubiertos']}\n"
-            if row['contacto']:
-                texto += f"<b>Contacto:</b> {row['contacto']}\n"
-            if row['enlace']:
-                texto += f"<b>Enlace:</b> {row['enlace']}\n"
-            buttons = [
-                [Button.inline('🔙 Volver atrás', 'volver_atras')],
-                [Button.inline('🏠 Volver al inicio', 'start')]
-            ]
-            await event.edit(texto, buttons=buttons, parse_mode='html')
-        except Exception as e:
-            print(f"[ERROR] proy_mes_: {e}")
-            await event.edit('No se pudo mostrar el proyecto seleccionado.')
-    elif data.startswith('proy_'):
-        _, idx, pais = data.split('_', 2)
-        proyectos = obtener_proyectos_por_pais(pais)
-        try:
-            idx = int(idx)
-            p = proyectos[idx]
-            dt_ini, dt_fin = extraer_fechas_inicio_fin(p['fechas'])
-            client._contexto_navegacion[user_id] = {'tipo': 'pais', 'valor': pais}
-            texto = f"<b>{p['titulo']}</b>\n\n"
-            texto += f"<b>Ciudad:</b> {p['ciudad']}\n"
-            texto += f"<b>Fecha inicio:</b> {dt_ini.strftime('%d/%m/%Y') if dt_ini else '-'}\n"
-            texto += f"<b>Fecha final:</b> {dt_fin.strftime('%d/%m/%Y') if dt_fin else '-'}\n"
-            texto += f"<b>Descripción:</b> {p['descripcion']}\n"
-            if p['requisitos']:
-                texto += f"<b>Requisitos:</b> {p['requisitos']}\n"
-            if p['gastos_cubiertos']:
-                texto += f"<b>Gastos cubiertos:</b> {p['gastos_cubiertos']}\n"
-            if p['contacto']:
-                texto += f"<b>Contacto:</b> {p['contacto']}\n"
-            if p['enlace']:
-                texto += f"<b>Enlace:</b> {p['enlace']}\n"
-            buttons = [
-                [Button.inline('🔙 Volver atrás', 'volver_atras')],
-                [Button.inline('🏠 Volver al inicio', 'start')]
-            ]
-            await event.edit(texto, buttons=buttons, parse_mode='html')
-        except Exception:
-            await event.edit('No se pudo mostrar el proyecto seleccionado.')
-    elif data == 'volver_atras':
-        ctx = client._contexto_navegacion.get(user_id)
-        if ctx and ctx['tipo'] == 'pais':
-            pais = ctx['valor']
-            proyectos = obtener_proyectos_por_pais(pais)
-            buttons = [[Button.inline(f"{p['titulo']} ({p['ciudad']})", f'proy_{i}_{pais}')] for i, p in enumerate(proyectos)]
-            buttons.append([Button.inline('🏠 Volver al inicio', 'start')])
-            await event.edit(f'Proyectos Erasmus en {pais}:', buttons=buttons)
-        elif ctx and ctx['tipo'] == 'mes':
-            mes = ctx['valor']
-            proyectos = obtener_proyectos_por_mes(mes)
-            buttons = [[Button.inline(f"{p[2]['titulo']} ({p[2]['ciudad']}, {p[2]['pais']})", f'proy_mes_{i}_{mes}')] for i, p in enumerate(proyectos)]
-            buttons.append([Button.inline('🏠 Volver al inicio', 'start')])
-            await event.edit(f'Proyectos Erasmus en {mes}:', buttons=buttons)
-        else:
-            buttons = [
-                [Button.inline('🌍 Buscar por país', 'paises')],
-                [Button.inline('📅 Buscar por mes', 'meses')],
-                [Button.inline('⏳ Deadline próxima', 'deadline_proxima')]
-            ]
-            await event.edit('¿Cómo quieres buscar proyectos Erasmus?', buttons=buttons)
-    elif data == 'start':
-        client._contexto_navegacion[user_id] = None
-        buttons = [
-            [Button.inline('🌍 Buscar por país', 'paises')],
-            [Button.inline('📅 Buscar por mes', 'meses')],
-            [Button.inline('⏳ Deadline próxima', 'deadline_proxima')]
+    proyectos = cargar_todos_los_proyectos()
+    ctx = client._contexto.get(user_id)
+
+    # --- Volver al menú principal ---
+    if data == 'start':
+        client._contexto[user_id] = None
+        botones = [
+            [Button.inline('🌍 Buscar por país', 'menu_paises')],
+            [Button.inline('📅 Buscar por mes', 'menu_meses')],
+            [Button.inline('📆 Buscar entre fechas', 'menu_rango')],
+            [Button.inline('⏳ Deadline próxima', 'menu_deadline')]
         ]
-        await event.edit('¿Cómo quieres buscar proyectos Erasmus?', buttons=buttons)
-    elif data == 'paises':
-        paises = obtener_paises_erasmus()
-        buttons = [[Button.inline(pais, f'pais_{pais}')] for pais in paises]
-        buttons.append([Button.inline('⬅️ Volver atrás', 'start')])
-        await event.edit('Elige un país para ver proyectos Erasmus:', buttons=buttons)
-    elif data == 'meses':
-        meses = obtener_meses_erasmus()
-        buttons = [[Button.inline(mes, f'mes_{mes}')] for mes in meses]
-        buttons.append([Button.inline('⬅️ Volver atrás', 'start')])
-        await event.edit('Elige un mes para ver proyectos Erasmus:', buttons=buttons)
-    elif data == 'deadline_proxima':
-        proyectos = filtrar_deadline_proxima(cargar_todos_los_proyectos())
-        if not proyectos:
-            await event.edit('No hay proyectos con deadline próxima.')
+        await event.edit('¿Cómo quieres buscar proyectos Erasmus?', buttons=botones)
+        return
+
+    # --- Menú “Buscar por país” ---
+    if data == 'menu_paises':
+        lista_paises = obtener_lista_paises(proyectos)
+        botones = [[Button.inline(p, f'pais_{p}')] for p in lista_paises]
+        botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+        await event.edit('Elige un país para ver proyectos:', buttons=botones)
+        return
+
+    # --- Menú “Buscar por mes” ---
+    if data == 'menu_meses':
+        meses_set = set()
+        for p in proyectos:
+            if p['fecha_inicio']:
+                meses_set.add(p['fecha_inicio'].strftime("%B %Y"))
+        lista_meses = sorted(
+            meses_set,
+            key=lambda x: (
+                int(x.split()[1]),
+                datetime.strptime(x.split()[0], "%B").month
+            )
+        )
+        botones = [[Button.inline(m, f'mes_{m}')] for m in lista_meses]
+        botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+        await event.edit('Elige un mes (p.ej. "July 2025") para ver proyectos:', buttons=botones)
+        return
+
+    # --- Menú “Buscar entre fechas” ---
+    if data == 'menu_rango':
+        await event.edit(
+            'Escribe dos fechas en formato YYYY-MM-DD en un mismo mensaje.\n'
+            'Ejemplo: "entre 2025-06-01 y 2025-06-15"\n\n'
+            'Si no incluyes dos fechas válidas, no se mostrarán resultados.'
+        )
+        return
+
+    # --- Menú “Deadline próxima” ---
+    if data == 'menu_deadline':
+        proximos = filtrar_deadline_proxima(proyectos, dias=14)
+        client._contexto[user_id] = {'modo': 'deadline', 'lista': proximos}
+        if not proximos:
+            await event.edit('No hay proyectos con deadline en los próximos 14 días.')
             return
-        # Ordenar por deadline más cercana
-        def dias_para_deadline(p):
-            deadline_str = p.get('deadline') or p.get('deadline', '')
-            try:
-                deadline = datetime.strptime(deadline_str, '%d %B %Y').date()
-            except ValueError:
-                try:
-                    deadline = datetime.strptime(deadline_str, '%d %b %Y').date()
-                except Exception:
-                    return 9999
-            return (deadline - datetime.now().date()).days
-        proyectos.sort(key=dias_para_deadline)
-        buttons = []
-        for i, p in enumerate(proyectos):
-            dias = dias_para_deadline(p)
-            texto_btn = f"{p['titulo']} ({p['ciudad']}, {p['pais']}) - {dias} días para cierre"
-            buttons.append([Button.inline(texto_btn, f"proy_deadline_{i}")])
-        buttons.append([Button.inline('🏠 Volver al inicio', 'start')])
-        await event.edit('Proyectos con deadline próxima:', buttons=buttons)
-
-# Comandos de administración (puedes mantenerlos o quitarlos si no los necesitas)
-@client.on(events.NewMessage(pattern='/id'))
-async def send_id(event):
-    user_id = str(event.sender_id)
-    await event.respond(f"Tu ID de usuario es: {user_id}")
-
-@client.on(events.NewMessage(pattern='/reset'))
-async def reset(event):
-    if event.sender_id in lista_profesores:
-        buttons = [[Button.inline('Sí', 'confirmar_reset'), Button.inline('No', 'cancelar_reset')]]
-        await event.respond('¿Estás seguro de que quieres borrar todos los datos de usuarios? No se podrán recuperar', buttons=buttons)
-    else:
-        await event.respond('No tienes permiso para ejecutar este comando. Sólo está disponible para profesores.')
-
-@client.on(events.NewMessage(pattern='/paises'))
-async def menu_paises(event):
-    paises = obtener_paises_erasmus()
-    buttons = [[Button.inline(pais, f'pais_{pais}')] for pais in paises]
-    buttons.append([Button.inline('⏳ Solo deadlines próximas', 'paises_deadline')])
-    await event.respond('Elige un país para ver proyectos Erasmus:', buttons=buttons)
-
-@client.on(events.NewMessage(pattern='/meses'))
-async def menu_meses(event):
-    meses = obtener_meses_erasmus()
-    buttons = [[Button.inline(mes, f'mes_{mes}')] for mes in meses]
-    buttons.append([Button.inline('⏳ Solo deadlines próximas', 'meses_deadline')])
-    await event.respond('Elige un mes para ver proyectos Erasmus:', buttons=buttons)
-
-# Handler para deadlines próximas por país
-@client.on(events.CallbackQuery(pattern=b'paises_deadline'))
-async def paises_deadline_handler(event):
-    proyectos = cargar_todos_los_proyectos()
-    proximos = filtrar_deadline_proxima(proyectos)
-    if not proximos:
-        await event.edit('No hay proyectos con deadline próxima.')
+        botones = []
+        hoy = datetime.now().date()
+        for i, p in enumerate(proximos):
+            dias = (p['deadline'] - hoy).days
+            botones.append([
+                Button.inline(
+                    f"{p['titulo']} ({p['ciudad']}, {p['pais']}) — {dias} días",
+                    f'proy_deadline_{i}'
+                )
+            ])
+        botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+        await event.edit('Proyectos con deadline próxima:', buttons=botones)
         return
-    buttons = [[Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f"proy_deadline_{i}")] for i, p in enumerate(proximos)]
-    buttons.append([Button.inline('🏠 Volver al inicio', 'start')])
-    await event.edit('Proyectos con deadline próxima:', buttons=buttons)
 
-# Handler para deadlines próximas por mes
-@client.on(events.CallbackQuery(pattern=b'meses_deadline'))
-async def meses_deadline_handler(event):
-    proyectos = cargar_todos_los_proyectos()
-    proximos = filtrar_deadline_proxima(proyectos)
-    if not proximos:
-        await event.edit('No hay proyectos con deadline próxima.')
+    # —————————————————————————————————————————————————————
+    # A partir de aquí, chequeamos primero los callbacks más específicos
+    # —————————————————————————————————————————————————————
+
+    # --- Detalle de proyecto semántico por rango (modo 'rango_sem') ---
+    if data.startswith('proy_rango_sem_'):
+        if not ctx or ctx.get('modo') != 'rango_sem':
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [
+            [Button.inline('🔙 Volver atrás', 'menu_rango')],
+            [Button.inline('🏠 Volver al inicio', 'start')]
+        ]
+        await event.edit(texto, buttons=botones, parse_mode='html')
         return
-    buttons = [[Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f"proy_deadline_{i}")] for i, p in enumerate(proximos)]
-    buttons.append([Button.inline('🏠 Volver al inicio', 'start')])
-    await event.edit('Proyectos con deadline próxima:', buttons=buttons)
 
-# Handler para mostrar proyecto de deadline próxima
-@client.on(events.CallbackQuery(pattern=b'proy_deadline_\d+'))
-async def proy_deadline_handler(event):
-    idx = int(event.data.decode().split('_')[-1])
-    proyectos = filtrar_deadline_proxima(cargar_todos_los_proyectos())
-    if idx < 0 or idx >= len(proyectos):
-        await event.edit('No se pudo mostrar el proyecto seleccionado.')
+    # --- Detalle de proyecto por rango (modo 'rango'): fechas ± país/ciudad o sólo fechas ---
+    if data.startswith('proy_rango_'):
+        if not ctx or ctx.get('modo') not in ('rango',):
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [
+            [Button.inline('🔙 Volver atrás', 'menu_rango')],
+            [Button.inline('🏠 Volver al inicio', 'start')]
+        ]
+        await event.edit(texto, buttons=botones, parse_mode='html')
         return
-    p = proyectos[idx]
-    texto = formatear_proyecto(p, mostrar_dias_deadline=True)
-    buttons = [[Button.inline('🏠 Volver al inicio', 'start')]]
-    await event.edit(texto, buttons=buttons, parse_mode='html')
 
+    # --- Detalle de proyecto País+Mes semántico (modo 'pais_mes_sem') ---
+    if data.startswith('proy_pais_mes_sem_'):
+        if not ctx or ctx.get('modo') != 'pais_mes_sem':
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [
+            [Button.inline('🔙 Volver atrás', 'start')],
+            [Button.inline('🏠 Volver al inicio', 'start')]
+        ]
+        await event.edit(texto, buttons=botones, parse_mode='html')
+        return
+
+    # --- Detalle de proyecto País+Mes (modo 'pais_mes') ---
+    if data.startswith('proy_pais_mes_'):
+        if not ctx or ctx.get('modo') != 'pais_mes':
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [
+            [Button.inline('🔙 Volver atrás', 'start')],
+            [Button.inline('🏠 Volver al inicio', 'start')]
+        ]
+        await event.edit(texto, buttons=botones, parse_mode='html')
+        return
+
+    # --- Detalle de proyecto País semántico (modo 'pais_sem') ---
+    if data.startswith('proy_pais_sem_'):
+        if not ctx or ctx.get('modo') != 'pais_sem':
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [
+            [Button.inline('🔙 Volver atrás', 'menu_paises')],
+            [Button.inline('🏠 Volver al inicio', 'start')]
+        ]
+        await event.edit(texto, buttons=botones, parse_mode='html')
+        return
+
+    # --- Detalle de proyecto País (modo 'pais') ---
+    if data.startswith('proy_pais_') and not data.startswith('proy_pais_mes_') and not data.startswith('proy_pais_sem_'):
+        if not ctx or ctx.get('modo') != 'pais':
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [
+            [Button.inline('🔙 Volver atrás', 'menu_paises')],
+            [Button.inline('🏠 Volver al inicio', 'start')]
+        ]
+        await event.edit(texto, buttons=botones, parse_mode='html')
+        return
+
+    # --- Detalle de proyecto Ciudad semántico (modo 'ciudad_sem') ---
+    if data.startswith('proy_ciudad_sem_'):
+        if not ctx or ctx.get('modo') != 'ciudad_sem':
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [
+            [Button.inline('🔙 Volver atrás', 'menu_ciudades')],
+            [Button.inline('🏠 Volver al inicio', 'start')]
+        ]
+        await event.edit(texto, buttons=botones, parse_mode='html')
+        return
+
+    # --- Detalle de proyecto Ciudad (modo 'ciudad') ---
+    if data.startswith('proy_ciudad_') and not data.startswith('proy_ciudad_sem_'):
+        if not ctx or ctx.get('modo') != 'ciudad':
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [
+            [Button.inline('🔙 Volver atrás', 'menu_ciudades')],
+            [Button.inline('🏠 Volver al inicio', 'start')]
+        ]
+        await event.edit(texto, buttons=botones, parse_mode='html')
+        return
+
+    # --- Detalle de proyecto Mes semántico (modo 'mes_sem') ---
+    if data.startswith('proy_mes_sem_'):
+        if not ctx or ctx.get('modo') != 'mes_sem':
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [
+            [Button.inline('🔙 Volver atrás', 'menu_meses')],
+            [Button.inline('🏠 Volver al inicio', 'start')]
+        ]
+        await event.edit(texto, buttons=botones, parse_mode='html')
+        return
+
+    # --- Detalle de proyecto Mes (modo 'mes') ---
+    if data.startswith('proy_mes_') and not data.startswith('proy_mes_sem_'):
+        if not ctx or ctx.get('modo') != 'mes':
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [
+            [Button.inline('🔙 Volver atrás', 'menu_meses')],
+            [Button.inline('🏠 Volver al inicio', 'start')]
+        ]
+        await event.edit(texto, buttons=botones, parse_mode='html')
+        return
+
+    # --- Detalle de proyecto por deadline próxima ---
+    if data.startswith('proy_deadline_'):
+        if not ctx or ctx.get('modo') != 'deadline':
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [[Button.inline('🏠 Volver al inicio', 'start')]]
+        await event.edit(texto, buttons=botones, parse_mode='html')
+        return
+
+    # --- Detalle de proyecto por búsqueda semántica (modo 'nlp') ---
+    if data.startswith('proy_nlp_'):
+        if not ctx or ctx.get('modo') != 'nlp':
+            await event.answer('Contexto inválido.')
+            return
+        idx = int(data.split('_')[-1])
+        lista = ctx['lista']
+        if idx < 0 or idx >= len(lista):
+            await event.edit('Proyecto no válido.')
+            return
+        proyecto = lista[idx]
+        texto = formatear_proyecto(proyecto, mostrar_dias_deadline=True)
+        botones = [[Button.inline('🏠 Volver al inicio', 'start')]]
+        await event.edit(texto, buttons=botones, parse_mode='html')
+        return
+
+# ===========================
+# ARRANCAR EL BOT
+# ===========================
 client.start()
 client.run_until_disconnected()
