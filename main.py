@@ -217,10 +217,9 @@ def calcular_embeds_proyectos(proyectos):
         txt = f"{p['titulo']}. {p['descripcion']}"
         textos.append(txt)
 
-    # Llamada a la nueva API de embeddings de OpenAI en lote
     resp = openai.embeddings.create(model="text-embedding-3-small", input=textos)
     embeddings = [np.array(d.embedding) for d in resp.data]
-    return embeddings  # lista de arrays np
+    return embeddings
 
 def buscar_proyectos_semantico(query, proyectos, embeddings_proyectos, top_k=5):
     """
@@ -693,6 +692,22 @@ async def callback_query_handler(event):
         await event.edit('Elige un país para ver proyectos:', buttons=botones)
         return
 
+    # --- Selección de un país ---
+    if data.startswith('pais_'):
+        pais = data.split('pais_', 1)[1]
+        proyectos_pais = filtrar_por_pais(proyectos, pais)
+        client._contexto[user_id] = {'modo': 'pais', 'lista': proyectos_pais}
+        if not proyectos_pais:
+            await event.edit(f'No hay proyectos Erasmus registrados para {pais}.')
+            return
+        botones = [
+            [Button.inline(f"{p['titulo']} ({p['ciudad']})", f'proy_pais_{i}')]
+            for i, p in enumerate(proyectos_pais)
+        ]
+        botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+        await event.edit(f'Proyectos en {pais}:', buttons=botones)
+        return
+
     # --- Menú “Buscar por mes” ---
     if data == 'menu_meses':
         meses_set = set()
@@ -709,6 +724,44 @@ async def callback_query_handler(event):
         botones = [[Button.inline(m, f'mes_{m}')] for m in lista_meses]
         botones.append([Button.inline('🏠 Volver al inicio', 'start')])
         await event.edit('Elige un mes (p.ej. "July 2025") para ver proyectos:', buttons=botones)
+        return
+
+    # --- Selección de un mes ---
+    if data.startswith('mes_'):
+        mes = data.split('mes_', 1)[1]
+        # Convertir “July 2025” a mes normalizado “julio” y año “2025”
+        partes = mes.split()
+        nombre_ingles = partes[0]
+        anio = int(partes[1])
+        # Mapeo inglés→español básico
+        map_mes_ing_es = {
+            "January": "enero", "February": "febrero", "March": "marzo",
+            "April": "abril", "May": "mayo", "June": "junio",
+            "July": "julio", "August": "agosto", "September": "septiembre",
+            "October": "octubre", "November": "noviembre", "December": "diciembre"
+        }
+        mes_es = map_mes_ing_es.get(nombre_ingles, None)
+        if not mes_es:
+            await event.edit(f'Mes inválido: {mes}.')
+            return
+
+        # Filtrar proyectos cuyo fecha_inicio está en ese mes y año
+        filtrados = []
+        for p in proyectos:
+            if p['fecha_inicio'] and p['fecha_inicio'].month == MESES_ES.index(mes_es) + 1 and p['fecha_inicio'].year == anio:
+                filtrados.append(p)
+        filtrados.sort(key=lambda x: x['fecha_inicio'] or datetime.max.date())
+
+        client._contexto[user_id] = {'modo': 'mes', 'lista': filtrados}
+        if not filtrados:
+            await event.edit(f'No hay proyectos Erasmus en {mes_es.capitalize()} {anio}.')
+            return
+        botones = [
+            [Button.inline(f"{p['titulo']} ({p['ciudad']}, {p['pais']})", f'proy_mes_{i}')]
+            for i, p in enumerate(filtrados)
+        ]
+        botones.append([Button.inline('🏠 Volver al inicio', 'start')])
+        await event.edit(f'Proyectos en {mes_es.capitalize()} {anio}:', buttons=botones)
         return
 
     # --- Menú “Buscar entre fechas” ---
