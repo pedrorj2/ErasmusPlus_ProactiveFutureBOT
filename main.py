@@ -39,7 +39,7 @@ def normalizar(texto: str) -> str:
 # ===========================
 # CARGAR PROYECTOS DESDE CSV (fechas en ISO)
 # ===========================
-def cargar_todos_los_proyectos(archivo='proyectos_erasmus.csv'):
+def cargar_todos_los_proyectos(archivo='erasmus_projects.csv'):
     """
     Lee un CSV con columnas:
       pais,ciudad,titulo,descripcion,fecha_inicio,fecha_fin,
@@ -274,19 +274,9 @@ async def initialize_and_start(event):
     ]
     await event.respond(
         '¡Hola! Este bot te ayuda a encontrar proyectos Erasmus.\n\n'
-        'Puedes usar los botones:\n'
-        '• Buscar por país\n'
-        '• Buscar por mes\n'
-        '• Buscar entre fechas (YYYY-MM-DD)\n'
-        '• Deadline próxima (próximos 14 días)\n\n'
-        'O escribe tu consulta en lenguaje natural, por ejemplo:\n'
-        '"Busco un proyecto en Alemania a finales de julio que se centre en tecnología o innovación digital"\n'
-        'El orden de filtrado será:\n'
-        '1. Fechas + país/ciudad\n'
-        '2. Fechas solamente\n'
-        '3. País/ciudad + mes\n'
-        '4. País/ciudad solo o mes solo\n'
-        '5. Búsqueda semántica con embeddings.\n',
+        'Puedes usar los botones de abajo.\n'
+        'O bien, escribe tu consulta en lenguaje natural, por ejemplo:\n'
+        '"Busco un proyecto en Alemania a finales de julio que se centre en tecnología o innovación digital"\n',
         buttons=botones
     )
 

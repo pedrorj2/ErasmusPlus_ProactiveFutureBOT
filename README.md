@@ -1,19 +1,21 @@
-<h1><ins>Autonomous Learning in Engineering through Gamified Activities Telegram Bot - ETSIAE UPM</ins></h1>
-
+# <ins>ProactiveFuture Erasmus+ Projects Bot — Telegram Assistant</ins>
 
 > [!NOTE]
-> - 🗂️ This repository contains the progress and code of the [IE24.1401 Educational Innovation Project](https://innovacioneducativa.upm.es/proyectos-ie/informacion?anyo=2023-2024&id=1160)
+> - 🤖 This repository contains the code and setup instructions for the **ProactiveFuture Erasmus+ Telegram Bot**, an initiative to **centralize and simplify access to Erasmus+ opportunities** through a friendly and intelligent Telegram assistant.
 > 
-> - 🎯 Objective: Enable students to perform self-assessment activities in a more autonomous and approachable way, using gamification techniques. By incorporating elements of game design, such as rewards, challenges, and progress tracking, we aim to make self-assessment more engaging and enjoyable for students.
+> - 🎯 **Objective**: Help to easily find Erasmus+ projects by filtering by date, country, and even **asking in natural language**. Whether you're looking for a mobility in Italy next month or want to explore options in renewable energy, this bot makes it quick and intuitive.
 >   
-> This `README.md` is made for those who are not even familiar with `Python`, so they can set up their bot by themselves.
+> This guide is written for those with **no prior knowledge of Python**, so you can deploy your own version of the bot with ease.
 
-### <ins>Documentation</ins>
+---
 
- - [Telethon Documentation](https://docs.telethon.dev/en/stable/)
- - [Manual and Project Report](https://blogs.upm.es/apgamtel/wp-content/uploads/sites/1189/2024/11/PIE24_1401_Telegram_Aeroelasticidad_Manual_v01.pdf)
+## <ins>Documentation</ins>
 
-<br>
+- [Telethon Documentation](https://docs.telethon.dev/en/stable/)
+- [Telegram Bot API](https://core.telegram.org/bots/api)
+- [ProactiveFuture Website](https://www.proactivefuture.eu/)
+
+---
 
 ### <ins>Requirements</ins>
 
@@ -73,7 +75,7 @@ In the search bar of Visual Code, a ">" will appear. With this, search for the a
 It will ask for the repository name (or URL), enter it:
 
 ```bash
-https://github.com/pedrorj2/Telegram-Gamification-UPM/
+https://github.com/pedrorj2/ErasmusPlus_ProactiveFutureBOT
 ```
 
 It will open the explorer to choose a local path to clone the repository.
@@ -91,18 +93,18 @@ Once the repository is cloned and opened with Visual Code, we need to fill in th
 api_id = ' '
 api_hash = ' '
 bot_token = ' '
-lista_profesores = []
+openai_api_key = ' '
 ```
 
 > [!WARNING]
 > You would see a import call like this in my code instead:
 > 
 > ```bash
-> from config import api_id, api_hash, bot_token, lista_profesores
+> from config import api_id, api_hash, bot_token, openai_api_key
 > ```
 > This makes possible to get this data from `config.py`, file which is not uploaded to the repository, as indicated on the `.gitignore` file.
 
-`lista_profesores` contains the user_ids of those who are granted access to restricted commands.
+`openai_api_key` contains the openai api key for the natural language use. Don't worry about expenses as we use `text-embedding-3-small`, it's cheap.
 
 `api_id` y `api_hash` are obtained by creating a "Telegram Application" through https://my.telegram.org/apps.
 
@@ -110,16 +112,6 @@ lista_profesores = []
 o do this, we need to create a bot, choose its name, and we will get this `bot_token` to access the Telegram HTTP API.
 
 With this, we can run our code, and our computer will host the bot's back-end. As long as it is running, our bot will respond to actions. However, if we close Visual Code, the bot will stop working until we restart it.
-
-### <ins>Admin Commands for Professors</ins>
-
-```bash
-/rankingprofesor  # Full user ranking with scores
-/media            # Average score and max score info
-/lista            # List of all registered users
-/reset            # Confirm and delete all user response data
-/id               # Display your Telegram sender ID
-```
 
 
 
